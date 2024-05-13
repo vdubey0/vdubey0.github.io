@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>California County Tesla Map</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .county {
+            stroke: #040404;
+            stroke-width: 1px;
+            padding: 0px;
+        }
+
+        .highlighted {
+            fill: orange;
+        }
+
+        #slider {
+            width: 400px;
+            margin: 20px auto;
+        }
+
+        #currentYear {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            text-align: center;
+            top: 50px;
+            left: 50px;
+        }
+
+        .slidecontainer {
+            width: 100%;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 15px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        .slider:hover {
+            opacity: 1;
+        }
+
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: red;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            background: red;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1> TITLE </h1>
+    <svg id="map" width="1000" height="1000"></svg>
+    <div id="tooltip" style="position: absolute; background-color: #f0dba8; padding: 10px;border-radius: 10px; width: 150px; color: black;"></div>
+    <input id="slider" type="range" min="2010" max="2020" value="2020" step="1" class="slider" style="position: absolute; top: 910px; left:650px">
+    <h3 style="position: absolute; top: 935px; left:650px" > 2010 </h3>
+    <h3 style="position: absolute; top: 935px; left:1015px" > 2020 </h3>
+    <h3 style="position: absolute; top: 935px; left:833px" > 2015 </h3>
+    <div style='position: absolute; top: 905px; left:650px'id="currentYear">Current Year: <span id="yearValue">2020</span></div>
+    <script>
+        const svg = d3.select("#map");
+        
+        const projection = d3.geoAlbersUsa()
+                            .translate([2000, 490])
+                            .scale(4000);
+        
+
+        const path = d3.geoPath().projection(projection);
+        
+        d3.json("California_County_Boundaries.geojson").then(function(geojson) {
+            
+            d3.csv("tesla_2020.csv").then(function(countyData) {
+                const countyMap = new Map(countyData.map(d => [d.County, +d.num_vehicles]));
+                let currentYearData = countyData;
+
+                const colorScale = d3.scaleLog()
+                                     .range(["#CCCCCC", "#DC5A3F", "#FF0000"])
+                                     .domain([1, d3.max(currentYearData, d => d.num_vehicles)]);
+                
+                svg.selectAll(".county")
+                    .data(geojson.features)
+                    .enter().append("path")
+                    .attr("class", function(d) {
+                        className =  d.properties.CountyName.replace(/\s/g, '_')
+                        return "county " + className;
+                    })
+                    .attr("d", path)
+                    .attr("fill", function(d) {
+                        const numTesla = countyMap.get(d.properties.CountyName);
+                        if (numTesla !== undefined) {
+                            return colorScale(numTesla);
+                        } else {
+                            return "gray";
+                        }
+                    })
+                    .on("mouseover", function(d) {
+                        console.log(d)
+                        d3.select(this).classed("highlighted", true);
+                        countyName = d3.select(this).attr("class").split(" ")[1].replaceAll('_', ' ')
+                        numTesla = countyMap.get(countyName);
+                        const tooltip = d3.select("#tooltip");
+
+                        if (numTesla == undefined) {
+                            numTesla = 0;
+                        }
+
+                        if (countyName == 'Orange') {
+                            countyName = 'Orange County';
+                        }
+
+                        tooltip.html(`<center><strong>${countyName}</strong><br>Tesla Vehicles: ${numTesla}</center>`);
+                        tooltip.style("opacity", 1)
+                        tooltip.style("top", (d3.pointer(event, this)[1]) + "px")
+                        tooltip.style("left", (d3.pointer(event, this)[0]) + 15 + "px")
+                    })
+                    .on("mouseout", function(d) {
+                        d3.select(this).classed("highlighted", false);
+                        tooltip.style.opacity = 0;
+                    });
+
+                // Update map when slider changes
+                d3.select("#slider").on("input", function() {
+                    const selectedYear = this.value;
+                    const filename = `tesla_${selectedYear}.csv`;
+
+                    // Load data for the selected year
+                    d3.csv(filename).then(function(newCountyData) {
+                        currentYearData = newCountyData;
+                        const newCountyMap = new Map(newCountyData.map(d => [d.County, +d.num_vehicles]));
+
+                        // Update color scale domain
+                        //colorScale.domain([1, d3.max(currentYearData, d => d.num_vehicles)]);
+
+                        // Update map colors
+                        svg.selectAll(".county")
+                            .data(geojson.features)
+                            .attr("class", function(d) {
+                                className =  d.properties.CountyName.replace(/\s/g, '_')
+                                return "county " + className;
+                            })
+                            .attr("fill", function(d) {
+                                    const num_tesla = newCountyMap.get(d.properties.CountyName);
+                                    if (num_tesla !== undefined) {
+                                        return colorScale(num_tesla);
+                                    } else {
+                                        return "gray";
+                                    }
+                            })
+                            .on("mouseover", function(d) {
+                                d3.select(this).classed("highlighted", true);
+                                countyName = d3.select(this).attr("class").split(" ")[1].replaceAll('_', ' ')
+                                numTesla = newCountyMap.get(countyName);
+                                const tooltip = d3.select("#tooltip");
+
+                                if (numTesla == undefined) {
+                                    numTesla = 0;
+                                }
+
+                                if (countyName == 'Orange') {
+                                    countyName = 'Orange County';
+                                }
+
+                                tooltip.html(`<center><strong>${countyName}</strong><br>Tesla Vehicles: ${numTesla}</center>`);
+                                tooltip.style("opacity", 1)
+                                tooltip.style("top", (d3.pointer(event, this)[1]) + "px")
+                                tooltip.style("left", (d3.pointer(event, this)[0]) + 15 + "px")
+                            })
+                            .on("mouseout", function(d) {
+                                d3.select(this).classed("highlighted", false);
+                                tooltip.style.opacity = 0;
+                            });
+                        d3.select("#yearValue").text(selectedYear);
+                    }); 
+                });
+            });
+        });
+    </script>
+    
+</body>
+</html>
