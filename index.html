@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>California County Tesla Map</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .county {
+            stroke: #040404;
+            stroke-width: 1px;
+            padding: 0px;
+        }
+
+        .highlighted {
+            fill: orange;
+        }
+
+        #slider {
+            width: 400px;
+            margin: 20px auto;
+        }
+
+        #currentYear {
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            text-align: center;
+            top: 50px;
+            left: 50px;
+        }
+
+        .slidecontainer {
+            width: 100%;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 15px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        .slider:hover {
+            opacity: 1;
+        }
+
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: red;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            background: red;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h2 style= "text-align:center;"> In CA, how does the amount of Teslas purchased differ by county, from 2010 to 2020? </h2>
+    <svg id="map" width="1000" height="1000"></svg>
+    <div id="tooltip" style="position: absolute; background-color: #f0dba8; padding: 10px;border-radius: 10px; width: 150px; color: black;"></div>
+    <input id="slider" type="range" min="2010" max="2020" value="2020" step="1" class="slider" style="position: absolute; top: 850px; left:630px">
+    <h3 style="position: absolute; top: 875px; left:630px" > 2010 </h3>
+    <h3 style="position: absolute; top: 875px; left:995px" > 2020 </h3>
+    <h3 style="position: absolute; top: 875px; left:813px" > 2015 </h3>
+    <div style='position: absolute; top: 845px; left:630px'id="currentYear">Current Year: <span id="yearValue">2020</span></div>
+
+    <h2> Writeup: </h2>
+    <h3> Design Rationale </h3>
+    <p> For our project 3 visualization, we chose to work with a dataset that contained data showing the number of Tesla vehicles by county in California over the past decade. This dataset was interesting to us as we wanted to see how the number of Tesla vehicles has changed as the state pushes to find sustainable alternatives to burning fossil fuels. In 2022, the state passed a law that would only permit the sale of vehicles with zero net emissions, so we hoped to explore how Tesla ownership has changed historically and if any insights we can draw can be extrapolated to this next decade. </p>
+    <p> When choosing the appropriate visualization, we immediately chose a choropleth of the state, so we could visualize exactly by county the number of Tesla vehicles owned for that year. The benefit of a choropleth is that the viewer can see which counties have more Tesla vehicles owned compared to others because of the shading component; even without knowing the exact numbers, for example, in the year 2014, it is clear that San Diego County has more Tesla vehicles than Imperial County because its shade of red is darker than Imperial County’s shading.</p>
+    <p> When beginning our design process, we knew that our interactive feature would be a slider or scrolling feature to show different breakdowns of Tesla ownership by year, but we also chose to include a hover interactive component. We chose to make this feature interactive rather than simply display the number on each county for readability and aesthetics. If we displayed the county name and Tesla count on the map itself, the text would either extend beyond the boundaries of the county or the text would be so small that it would be unreadable. By incorporating the mouse over component, each county label and Tesla count can be displayed uniformly for the viewer to easily digest. Also, the hover component allows for the reader to get the exact number of Teslas on demand, rather than having to infer them from the colors.</p>
+    <p> Finally to display the data by year, we included a slider for the viewer to easily toggle between years and see how the map changes from year to year. We briefly considered visualizing the annual changes by scrolling through the webpage, however we felt the slider was more appropriate as the viewer could better compare years, especially if the goal is to compare non-adjacent years. For the purpose of this visualization, a scrolling webpage would not add much value to understanding the data, if anything it could make the viewer more confused, while the slider very easily communicates that the map is displaying data for a single year in a set timeframe. We also considered calculating a percent change type metric that could show how the number of Teslas in a county have changed over time, instead of the slider. This would have been simpler to implement because it requires less functionality. However, we thought the slider would be more clear and offer a better user experience since interpreting a percent change could be somewhat tricky. Also a single number like percent change masks a lot of the underlying data. With the slider, all the data is on the visualization, none of it masked.</p>
+    <h3> Development Process </h3>
+    <p> We spent 3 hours together setting up our joint environment and determining the baseline for our visualization. After this initial meeting, we both individually created choropleths, with Pallavi spending 4 hours working on hers and Vrisan spending 5 hours on his. We decided to move forward with Vrisan’s baseline choropleth because we felt it was more bug-free and user-friendly. Vrisan spent 2 hours refining the choropleth to display the seen color grading and hover component. Pallavi spent 2 hours including the slider, title and completing the write-up. From a development standpoint getting the choropleth to render and the interactions to show up where we wanted them took the most time. It involved understanding a ton of documentation and then debugging when things went wrong. This was also our first time working with d3 and Javascript without explicit guidance so getting acclimated to syntax and notation took some time as well. </p>
+    <script>
+        const svg = d3.select("#map");
+        
+        const projection = d3.geoAlbersUsa()
+                            .translate([2000, 450])
+                            .scale(4000);
+        
+
+        const path = d3.geoPath().projection(projection);
+        
+        d3.json("California_County_Boundaries.geojson").then(function(geojson) {
+            
+            d3.csv("tesla_2020.csv").then(function(countyData) {
+                const countyMap = new Map(countyData.map(d => [d.County, +d.num_vehicles]));
+                let currentYearData = countyData;
+
+                const colorScale = d3.scaleLog()
+                                     .range(["#CCCCCC", "#DC5A3F", "#FF0000"])
+                                     .domain([1, d3.max(currentYearData, d => d.num_vehicles)]);
+                
+                svg.selectAll(".county")
+                    .data(geojson.features)
+                    .enter().append("path")
+                    .attr("class", function(d) {
+                        className =  d.properties.CountyName.replace(/\s/g, '_')
+                        return "county " + className;
+                    })
+                    .attr("d", path)
+                    .attr("fill", function(d) {
+                        const numTesla = countyMap.get(d.properties.CountyName);
+                        if (numTesla !== undefined) {
+                            return colorScale(numTesla);
+                        } else {
+                            return "gray";
+                        }
+                    })
+                    .on("mouseover", function(d) {
+                        console.log(d)
+                        d3.select(this).classed("highlighted", true);
+                        countyName = d3.select(this).attr("class").split(" ")[1].replaceAll('_', ' ')
+                        numTesla = countyMap.get(countyName);
+                        const tooltip = d3.select("#tooltip");
+
+                        if (numTesla == undefined) {
+                            numTesla = 0;
+                        }
+
+                        if (countyName == 'Orange') {
+                            countyName = 'Orange County';
+                        }
+
+                        tooltip.html(`<center><strong>${countyName}</strong><br>Tesla Vehicles: ${numTesla}</center>`);
+                        tooltip.style("opacity", 1)
+                        tooltip.style("top", (d3.pointer(event, this)[1]) + "px")
+                        tooltip.style("left", (d3.pointer(event, this)[0]) + 15 + "px")
+                    })
+                    .on("mouseout", function(d) {
+                        d3.select(this).classed("highlighted", false);
+                        tooltip.style.opacity = 0;
+                    });
+
+                // Update map when slider changes
+                d3.select("#slider").on("input", function() {
+                    const selectedYear = this.value;
+                    const filename = `tesla_${selectedYear}.csv`;
+
+                    // Load data for the selected year
+                    d3.csv(filename).then(function(newCountyData) {
+                        currentYearData = newCountyData;
+                        const newCountyMap = new Map(newCountyData.map(d => [d.County, +d.num_vehicles]));
+
+                        // Update color scale domain
+                        //colorScale.domain([1, d3.max(currentYearData, d => d.num_vehicles)]);
+
+                        // Update map colors
+                        svg.selectAll(".county")
+                            .data(geojson.features)
+                            .attr("class", function(d) {
+                                className =  d.properties.CountyName.replace(/\s/g, '_')
+                                return "county " + className;
+                            })
+                            .attr("fill", function(d) {
+                                    const num_tesla = newCountyMap.get(d.properties.CountyName);
+                                    if (num_tesla !== undefined) {
+                                        return colorScale(num_tesla);
+                                    } else {
+                                        return "gray";
+                                    }
+                            })
+                            .on("mouseover", function(d) {
+                                d3.select(this).classed("highlighted", true);
+                                countyName = d3.select(this).attr("class").split(" ")[1].replaceAll('_', ' ')
+                                numTesla = newCountyMap.get(countyName);
+                                const tooltip = d3.select("#tooltip");
+
+                                if (numTesla == undefined) {
+                                    numTesla = 0;
+                                }
+
+                                if (countyName == 'Orange') {
+                                    countyName = 'Orange County';
+                                }
+
+                                tooltip.html(`<center><strong>${countyName}</strong><br>Tesla Vehicles: ${numTesla}</center>`);
+                                tooltip.style("opacity", 1)
+                                tooltip.style("top", (d3.pointer(event, this)[1]) + "px")
+                                tooltip.style("left", (d3.pointer(event, this)[0]) + 15 + "px")
+                            })
+                            .on("mouseout", function(d) {
+                                d3.select(this).classed("highlighted", false);
+                                tooltip.style.opacity = 0;
+                            });
+                        d3.select("#yearValue").text(selectedYear);
+                    }); 
+                });
+            });
+        });
+    </script>
+    
+</body>
+</html>
